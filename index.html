@@ -169,6 +169,7 @@ let remoteInputs = {}; // playerIdx -> input state
 document.addEventListener('keydown', e => { keys[e.code] = true; e.preventDefault(); });
 document.addEventListener('keyup', e => { keys[e.code] = false; });
 canvas.addEventListener('mousedown', e => {
+  if (!gameRunning) return;
   if (e.button === 0) { mouseDown = true; mouseDownTime = 0; }
   if (e.button === 2) { rightClicked = true; }
   e.preventDefault();
@@ -176,6 +177,13 @@ canvas.addEventListener('mousedown', e => {
 canvas.addEventListener('mouseup', e => {
   if (e.button === 0) mouseDown = false;
   e.preventDefault();
+});
+document.addEventListener('mousedown', e => {
+  // Prevent button clicks from triggering game input
+  if (e.target.tagName === 'BUTTON' || e.target.tagName === 'TEXTAREA') return;
+});
+document.addEventListener('mouseup', e => {
+  if (e.button === 0) mouseDown = false;
 });
 canvas.addEventListener('contextmenu', e => e.preventDefault());
 
@@ -656,6 +664,8 @@ function updateEffects(dt) {
 function render() {
   ctx.fillStyle = '#111';
   ctx.fillRect(0, 0, 800, 600);
+
+  if (!gameRunning && players.length === 0) return; // Nothing to draw yet
 
   drawField();
   drawBombs();
@@ -1333,6 +1343,8 @@ function showLobby(num) {
 // ============================================
 // START
 // ============================================
+initField(); // Prevent crash when render runs before game starts
+lastTs = performance.now();
 requestAnimationFrame(gameLoop);
 </script>
 </body>
