@@ -172,8 +172,12 @@ function getLocalInput(playerIdx) {
   let inp = { up:false, down:false, left:false, right:false, bomb:false, charging:false, chargeTime:0, swingRelease:false };
   if (gameMode === 'local') {
     if (playerIdx === 0) {
-      inp.up = !!keys['KeyW']; inp.down = !!keys['KeyS'];
-      inp.left = !!keys['KeyA']; inp.right = !!keys['KeyD'];
+      // 1P vs CPU: WASD+矢印 両方OK。2P以上: WASDのみ
+      const arrowOk = !players.some((p, i) => i >= 1 && !p.isCpu);
+      inp.up = !!keys['KeyW'] || (arrowOk && !!keys['ArrowUp']);
+      inp.down = !!keys['KeyS'] || (arrowOk && !!keys['ArrowDown']);
+      inp.left = !!keys['KeyA'] || (arrowOk && !!keys['ArrowLeft']);
+      inp.right = !!keys['KeyD'] || (arrowOk && !!keys['ArrowRight']);
       inp.bomb = rightClicked; inp.charging = mouseDown; inp.chargeTime = mouseDownTime;
     } else if (playerIdx === 1) {
       inp.up = !!keys['ArrowUp']; inp.down = !!keys['ArrowDown'];
