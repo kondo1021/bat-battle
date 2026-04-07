@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>BAT BATTLE</title>
+<script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
 <style>
 * { margin:0; padding:0; box-sizing:border-box; }
 body { background:#111; display:flex; justify-content:center; align-items:center; height:100vh; font-family:'Courier New',monospace; overflow:hidden; user-select:none; }
@@ -14,15 +15,18 @@ canvas { display:block; background:#000; }
 h1 { font-size:48px; color:#f84; margin-bottom:30px; text-shadow:3px 3px 0 #a40; letter-spacing:4px; }
 .btn { padding:12px 32px; margin:8px; font-size:18px; font-family:inherit; background:#333; color:#fff; border:2px solid #f84; cursor:pointer; transition:0.2s; min-width:220px; }
 .btn:hover { background:#f84; color:#000; }
+.btn.small { min-width:120px; font-size:14px; padding:8px 20px; }
 .subtitle { color:#aaa; margin-bottom:20px; font-size:14px; }
 .section { margin:12px 0; text-align:center; }
 .section label { display:block; margin-bottom:4px; color:#f84; font-size:14px; }
-textarea.code { width:360px; height:60px; background:#222; color:#0f0; border:1px solid #555; font-size:11px; font-family:monospace; resize:none; padding:4px; }
-.status { font-size:13px; margin:4px 0; }
+.status { font-size:14px; margin:8px 0; }
 .status.ok { color:#0f0; }
 .status.wait { color:#fa0; }
+.status.err { color:#f44; }
 #hud { position:absolute; top:4px; left:4px; color:#fff; font-size:13px; z-index:5; pointer-events:none; }
 .controls-info { color:#888; font-size:11px; margin-top:16px; text-align:center; line-height:1.8; }
+.room-code { font-size:64px; color:#0f0; letter-spacing:16px; font-weight:bold; margin:16px 0; text-shadow:0 0 20px #0f0; }
+.room-input { font-size:36px; letter-spacing:12px; width:200px; text-align:center; background:#222; color:#0f0; border:2px solid #0f0; padding:8px; font-family:inherit; }
 </style>
 </head>
 <body>
@@ -52,52 +56,35 @@ textarea.code { width:360px; height:60px; background:#222; color:#0f0; border:1p
 <!-- LOBBY -->
 <div id="lobbyScreen" class="screen">
 <h1 style="font-size:32px;">ONLINE LOBBY</h1>
-<div>
-<button class="btn" id="btnHost" onclick="netHost()">部屋を作る (HOST)</button>
-<button class="btn" id="btnJoin" onclick="netJoin()">部屋に参加 (JOIN)</button>
+<div id="lobbyChoice">
+<button class="btn" onclick="netHost()">部屋を作る</button>
+<button class="btn" onclick="netJoinUI()">部屋に参加</button>
 </div>
-<div id="lobbyHost" style="display:none;">
-<div class="section">
-<label>Guest 1 用オファーコード (相手に送ってください)</label>
-<textarea class="code" id="offer1" readonly></textarea>
-<button class="btn" style="min-width:100px;font-size:13px;" onclick="copyText('offer1')">Copy</button>
-</div>
-<div id="host2ndSlot" style="display:none;">
-<div class="section">
-<label>Guest 2 用オファーコード (相手に送ってください)</label>
-<textarea class="code" id="offer2" readonly></textarea>
-<button class="btn" style="min-width:100px;font-size:13px;" onclick="copyText('offer2')">Copy</button>
-</div>
-</div>
-<div class="section">
-<label>Guest からのアンサーコードを貼り付け</label>
-<textarea class="code" id="answerInput" placeholder="アンサーコードをここに貼り付け..."></textarea>
-<button class="btn" style="min-width:100px;font-size:13px;" onclick="hostApplyAnswer()">接続</button>
-</div>
+<div id="lobbyHostView" style="display:none;">
+<p style="color:#aaa;">部屋コードを相手に教えてください</p>
+<div class="room-code" id="roomCodeDisplay">----</div>
 <p id="hostStatus" class="status wait">接続待ち...</p>
 <button class="btn" id="btnStart" style="display:none;" onclick="netStartGame()">ゲーム開始</button>
 </div>
-<div id="lobbyJoin" style="display:none;">
-<div class="section">
-<label>ホストのオファーコードを貼り付け</label>
-<textarea class="code" id="offerInput" placeholder="オファーコードをここに貼り付け..."></textarea>
-<button class="btn" style="min-width:100px;font-size:13px;" onclick="joinApplyOffer()">接続</button>
-</div>
-<div class="section">
-<label>アンサーコード (ホストに送ってください)</label>
-<textarea class="code" id="answerOutput" readonly></textarea>
-<button class="btn" style="min-width:100px;font-size:13px;" onclick="copyText('answerOutput')">Copy</button>
-</div>
-<p id="joinStatus" class="status wait">ホストのコードを貼り付けてください</p>
+<div id="lobbyJoinView" style="display:none;">
+<p style="color:#aaa;">部屋コードを入力してください</p>
+<input type="text" class="room-input" id="roomCodeInput" maxlength="4" placeholder="0000">
+<br>
+<button class="btn" style="margin-top:12px;" onclick="netJoinRoom()">接続</button>
+<p id="joinStatus" class="status wait"></p>
 </div>
 <br>
-<button class="btn" onclick="showTitle()">戻る</button>
+<button class="btn small" onclick="showTitle()">戻る</button>
 </div>
 
 <!-- RESULT -->
 <div id="resultScreen" class="screen">
 <h1 id="resultText" style="font-size:36px;"></h1>
-<button class="btn" onclick="showTitle()">タイトルに戻る</button>
+<div id="resultButtons">
+<button class="btn" id="btnRematch" onclick="requestRematch()">再戦</button>
+<button class="btn" onclick="quitToTitle()">やめる</button>
+</div>
+<p id="rematchStatus" class="status" style="display:none;"></p>
 </div>
 </div>
 
@@ -108,66 +95,63 @@ textarea.code { width:360px; height:60px; background:#222; color:#0f0; border:1p
 const COLS = 13, ROWS = 13, CELL = 40;
 const FIELD_W = COLS * CELL, FIELD_H = ROWS * CELL;
 const FIELD_X = (800 - FIELD_W) / 2, FIELD_Y = (600 - FIELD_H) / 2;
-const MOVE_SPEED = 150; // px/sec
+const MOVE_SPEED = 150;
 const CHARGE_MOVE_MULT = 0.4;
-const MAX_CHARGE = 3.0; // seconds
-const BOMB_FUSE = 3.0; // seconds
-const BOMB_WARN = 1.0; // seconds before explosion to show range
-const BLAST_RANGE = 2; // cells
-const SHRINK_INTERVAL = 15; // seconds
-const SHRINK_WARN = 5; // seconds before shrink to blink
+const MAX_CHARGE = 3.0;
+const BOMB_FUSE = 3.0;
+const BOMB_WARN = 1.0;
+const BLAST_RANGE = 2;
+const SHRINK_INTERVAL = 15;
+const SHRINK_WARN = 5;
 const MAX_BOMBS = 2;
 const STUN_BASE = 0.5;
 const STUN_MAX = 1.5;
-const BAT_RANGE = 1.2; // cells, hitbox length
-const BAT_WIDTH = 0.8; // cells, hitbox width
-const BOMB_FLY_SPEED = 500; // px/sec
-const KNOCKBACK_SPEED = 600; // px/sec
+const BAT_RANGE = 1.2;
+const BAT_WIDTH = 0.8;
+const BOMB_FLY_SPEED = 500;
+const KNOCKBACK_SPEED = 600;
 const PLAYER_SIZE = 28;
 const COLORS = ['#4488ff','#ff4444','#44dd44','#cc44cc'];
-const COLOR_NAMES = ['BLUE','RED','GREEN','PURPLE'];
-const DIR_DX = [0, 0, -1, 1]; // up down left right
+const DIR_DX = [0, 0, -1, 1];
 const DIR_DY = [-1, 1, 0, 0];
-const DIR_NAMES = ['up','down','left','right'];
 
 // ============================================
 // GLOBALS
 // ============================================
 const canvas = document.getElementById('c');
 const ctx = canvas.getContext('2d');
-const hud = document.getElementById('hud');
 
-let gameMode = null; // 'local' | 'online-host' | 'online-guest'
+let gameMode = null;
 let playerCount = 2;
 let localPlayerIdx = 0;
 let players = [];
 let bombs = [];
 let effects = [];
-let field = []; // 2D: 0=active, 1=warning, 2=destroyed
+let field = [];
 let shrinkLevel = 0;
 let shrinkTimer = 0;
 let gameTime = 0;
 let gameRunning = false;
 let lastTs = 0;
 
-// Input
 let keys = {};
 let mouseDown = false;
 let mouseDownTime = 0;
 let rightClicked = false;
 
-// Network
-let netConnections = []; // { pc, dc, ready }
-let netRole = null; // 'host' | 'guest'
+// Network (PeerJS)
+let peer = null;
+let netRole = null;
+let netConns = [];
 let onlinePlayers = 2;
-let guestAnswerQueue = [];
-let remoteInputs = {}; // playerIdx -> input state
+let remoteInputs = {};
+let netSyncTimer = 0;
+let rematchVotes = new Set();
 
 // ============================================
 // INPUT
 // ============================================
 document.addEventListener('keydown', e => {
-  // Allow Ctrl+C/V/A in textareas and inputs
   if ((e.ctrlKey || e.metaKey) && ['KeyC','KeyV','KeyA','KeyX'].includes(e.code)) return;
   if (e.target.tagName === 'TEXTAREA' || e.target.tagName === 'INPUT') return;
   keys[e.code] = true;
@@ -180,27 +164,17 @@ canvas.addEventListener('mousedown', e => {
   if (e.button === 2) { rightClicked = true; }
   e.preventDefault();
 });
-canvas.addEventListener('mouseup', e => {
-  if (e.button === 0) mouseDown = false;
-  e.preventDefault();
-});
-document.addEventListener('mousedown', e => {
-  // Prevent button clicks from triggering game input
-  if (e.target.tagName === 'BUTTON' || e.target.tagName === 'TEXTAREA') return;
-});
-document.addEventListener('mouseup', e => {
-  if (e.button === 0) mouseDown = false;
-});
+canvas.addEventListener('mouseup', e => { if (e.button === 0) mouseDown = false; e.preventDefault(); });
+document.addEventListener('mouseup', e => { if (e.button === 0) mouseDown = false; });
 canvas.addEventListener('contextmenu', e => e.preventDefault());
 
 function getLocalInput(playerIdx) {
-  let inp = { up:false, down:false, left:false, right:false, bomb:false, swingRelease:false, charging:false, chargeTime:0 };
+  let inp = { up:false, down:false, left:false, right:false, bomb:false, charging:false, chargeTime:0, swingRelease:false };
   if (gameMode === 'local') {
     if (playerIdx === 0) {
       inp.up = !!keys['KeyW']; inp.down = !!keys['KeyS'];
       inp.left = !!keys['KeyA']; inp.right = !!keys['KeyD'];
       inp.bomb = rightClicked; inp.charging = mouseDown; inp.chargeTime = mouseDownTime;
-      inp.swingRelease = !mouseDown && mouseDownTime > 0;
     } else if (playerIdx === 1) {
       inp.up = !!keys['ArrowUp']; inp.down = !!keys['ArrowDown'];
       inp.left = !!keys['ArrowLeft']; inp.right = !!keys['ArrowRight'];
@@ -214,7 +188,7 @@ function getLocalInput(playerIdx) {
       inp.charging = !!keys['KeyB'];
       inp.chargeTime = players[2] ? players[2].chargeTime : 0;
     }
-  } else if (gameMode === 'online-host' || gameMode === 'online-guest') {
+  } else {
     inp.up = !!keys['KeyW'] || !!keys['ArrowUp'];
     inp.down = !!keys['KeyS'] || !!keys['ArrowDown'];
     inp.left = !!keys['KeyA'] || !!keys['ArrowLeft'];
@@ -222,7 +196,6 @@ function getLocalInput(playerIdx) {
     inp.bomb = rightClicked;
     inp.charging = mouseDown;
     inp.chargeTime = mouseDownTime;
-    inp.swingRelease = !mouseDown && mouseDownTime > 0;
   }
   return inp;
 }
@@ -249,7 +222,6 @@ function updateField(dt) {
   const nextShrink = SHRINK_INTERVAL;
   const warnStart = nextShrink - SHRINK_WARN;
 
-  // Warning phase
   if (shrinkTimer >= warnStart && shrinkLevel < 6) {
     const sl = shrinkLevel;
     for (let r = 0; r < ROWS; r++) {
@@ -257,14 +229,13 @@ function updateField(dt) {
         if (field[r][c] === 2) continue;
         if (r < sl + 1 || r >= ROWS - sl - 1 || c < sl + 1 || c >= COLS - sl - 1) {
           if (r >= sl && r < ROWS - sl && c >= sl && c < COLS - sl) {
-            field[r][c] = 1; // warning
+            field[r][c] = 1;
           }
         }
       }
     }
   }
 
-  // Shrink
   if (shrinkTimer >= nextShrink && shrinkLevel < 6) {
     const sl = shrinkLevel;
     for (let r = 0; r < ROWS; r++) {
@@ -276,20 +247,13 @@ function updateField(dt) {
     }
     shrinkLevel++;
     shrinkTimer = 0;
-
-    // Kill players on destroyed cells
     players.forEach(p => {
       if (!p.alive) return;
       const gc = Math.floor((p.x - FIELD_X) / CELL);
       const gr = Math.floor((p.y - FIELD_Y) / CELL);
       if (!cellActive(gr, gc)) eliminatePlayer(p);
     });
-
-    // Remove bombs on destroyed cells
-    bombs = bombs.filter(b => {
-      if (b.flying) return true;
-      return cellActive(b.row, b.col);
-    });
+    bombs = bombs.filter(b => b.flying || cellActive(b.row, b.col));
   }
 }
 
@@ -327,17 +291,11 @@ function updatePlayer(p, dt, inp) {
     }
     return;
   }
-
-  // Stun
   if (p.stunTime > 0) { p.stunTime -= dt; return; }
-
-  // Knockback
   if (p.knockback) {
-    p.x += p.kbVx * dt;
-    p.y += p.kbVy * dt;
+    p.x += p.kbVx * dt; p.y += p.kbVy * dt;
     p.kbTime -= dt;
     if (p.kbTime <= 0) p.knockback = false;
-    // Check out of field
     const gc = Math.floor((p.x - FIELD_X) / CELL);
     const gr = Math.floor((p.y - FIELD_Y) / CELL);
     if (!cellActive(gr, gc) || p.x < FIELD_X || p.x >= FIELD_X + FIELD_W || p.y < FIELD_Y || p.y >= FIELD_Y + FIELD_H) {
@@ -346,7 +304,6 @@ function updatePlayer(p, dt, inp) {
     return;
   }
 
-  // Movement
   let dx = 0, dy = 0;
   if (inp.up) { dy = -1; p.dir = 0; }
   if (inp.down) { dy = 1; p.dir = 1; }
@@ -355,104 +312,67 @@ function updatePlayer(p, dt, inp) {
 
   let speed = MOVE_SPEED;
   if (p.charging) speed *= CHARGE_MOVE_MULT;
-
   if (dx !== 0 && dy !== 0) { dx *= 0.707; dy *= 0.707; }
   let nx = p.x + dx * speed * dt;
   let ny = p.y + dy * speed * dt;
 
-  // Clamp to active field
   const margin = PLAYER_SIZE / 2 - 2;
   const minBound = shrinkLevel;
   const maxBound = 13 - shrinkLevel;
-  const minX = FIELD_X + minBound * CELL + margin;
-  const maxX = FIELD_X + maxBound * CELL - margin;
-  const minY = FIELD_Y + minBound * CELL + margin;
-  const maxY = FIELD_Y + maxBound * CELL - margin;
-  nx = Math.max(minX, Math.min(maxX, nx));
-  ny = Math.max(minY, Math.min(maxY, ny));
+  nx = Math.max(FIELD_X + minBound * CELL + margin, Math.min(FIELD_X + maxBound * CELL - margin, nx));
+  ny = Math.max(FIELD_Y + minBound * CELL + margin, Math.min(FIELD_Y + maxBound * CELL - margin, ny));
   p.x = nx; p.y = ny;
 
-  // Charging
   if (p.swingCooldown > 0) p.swingCooldown -= dt;
   if (inp.charging && p.swingCooldown <= 0) {
     p.charging = true;
     p.chargeTime += dt;
     if (p.chargeTime > MAX_CHARGE) p.chargeTime = MAX_CHARGE;
   }
-
-  // Swing release
   if (p.charging && !inp.charging) {
     performSwing(p);
-    p.charging = false;
-    p.chargeTime = 0;
-    p.swingCooldown = 0.3;
+    p.charging = false; p.chargeTime = 0; p.swingCooldown = 0.3;
   }
-  if (!inp.charging) { p.charging = false; }
-
-  // Bomb
-  if (inp.bomb) {
-    placeBomb(p);
-  }
+  if (!inp.charging) p.charging = false;
+  if (inp.bomb) placeBomb(p);
 }
 
 function performSwing(p) {
   const charge = p.chargeTime / MAX_CHARGE;
   const cx = p.x + DIR_DX[p.dir] * CELL * 0.8;
   const cy = p.y + DIR_DY[p.dir] * CELL * 0.8;
-  const hw = BAT_WIDTH * CELL / 2;
-  const hl = BAT_RANGE * CELL / 2;
-
+  const hw = BAT_WIDTH * CELL / 2, hl = BAT_RANGE * CELL / 2;
   let rx, ry, rw, rh;
-  if (p.dir <= 1) { // up/down
-    rx = cx - hw; ry = cy - hl; rw = hw * 2; rh = hl * 2;
-  } else { // left/right
-    rx = cx - hl; ry = cy - hw; rw = hl * 2; rh = hw * 2;
-  }
-
+  if (p.dir <= 1) { rx = cx - hw; ry = cy - hl; rw = hw * 2; rh = hl * 2; }
+  else { rx = cx - hl; ry = cy - hw; rw = hl * 2; rh = hw * 2; }
   effects.push({ type: 'swing', x: cx, y: cy, dir: p.dir, time: 0.2, charge });
 
-  // Hit players
   players.forEach(t => {
     if (t === p || !t.alive || t.knockback) return;
     if (rectHit(t.x - PLAYER_SIZE/2, t.y - PLAYER_SIZE/2, PLAYER_SIZE, PLAYER_SIZE, rx, ry, rw, rh)) {
       if (charge >= 0.95) {
-        // Max charge: knockback off field
-        t.knockback = true;
-        t.kbVx = DIR_DX[p.dir] * KNOCKBACK_SPEED;
-        t.kbVy = DIR_DY[p.dir] * KNOCKBACK_SPEED;
-        t.kbTime = 1.5;
-        t.dir = p.dir;
+        t.knockback = true; t.kbVx = DIR_DX[p.dir] * KNOCKBACK_SPEED;
+        t.kbVy = DIR_DY[p.dir] * KNOCKBACK_SPEED; t.kbTime = 1.5; t.dir = p.dir;
       } else {
-        // Stun + optional small knockback
         t.stunTime = STUN_BASE + charge * (STUN_MAX - STUN_BASE);
         if (charge > 0.3) {
           const kb = charge * 3 * CELL;
-          t.knockback = true;
-          t.kbVx = DIR_DX[p.dir] * kb * 2;
-          t.kbVy = DIR_DY[p.dir] * kb * 2;
-          t.kbTime = 0.3;
+          t.knockback = true; t.kbVx = DIR_DX[p.dir] * kb * 2;
+          t.kbVy = DIR_DY[p.dir] * kb * 2; t.kbTime = 0.3;
         }
-        // Cancel target's charge
-        t.charging = false;
-        t.chargeTime = 0;
+        t.charging = false; t.chargeTime = 0;
       }
       effects.push({ type: 'hit', x: t.x, y: t.y, time: 0.3 });
     }
   });
 
-  // Hit bombs
   bombs.forEach(b => {
     if (b.flying) return;
-    const bx = FIELD_X + b.col * CELL;
-    const by = FIELD_Y + b.row * CELL;
+    const bx = FIELD_X + b.col * CELL, by = FIELD_Y + b.row * CELL;
     if (rectHit(bx, by, CELL, CELL, rx, ry, rw, rh)) {
-      b.flying = true;
-      b.flyDir = p.dir;
-      const dist = 2 + charge * 8;
-      b.flyDist = dist * CELL;
-      b.flySpeed = BOMB_FLY_SPEED;
-      b.fx = bx + CELL / 2;
-      b.fy = by + CELL / 2;
+      b.flying = true; b.flyDir = p.dir;
+      b.flyDist = (2 + charge * 8) * CELL; b.flySpeed = BOMB_FLY_SPEED;
+      b.fx = bx + CELL / 2; b.fy = by + CELL / 2; b.traveled = 0;
     }
   });
 }
@@ -465,10 +385,8 @@ function rectHit(x1, y1, w1, h1, x2, y2, w2, h2) {
 // BOMB
 // ============================================
 function placeBomb(p) {
-  const activeBombs = bombs.filter(b => b.owner === p.idx).length;
-  if (activeBombs >= MAX_BOMBS) return;
+  if (bombs.filter(b => b.owner === p.idx).length >= MAX_BOMBS) return;
   const g = playerGridPos(p);
-  // Don't place if bomb already here
   if (bombs.some(b => !b.flying && b.col === g.col && b.row === g.row)) return;
   if (!cellActive(g.row, g.col)) return;
   bombs.push({ owner: p.idx, col: g.col, row: g.row, timer: BOMB_FUSE, flying: false, fx: 0, fy: 0, flyDir: 0, flyDist: 0, flySpeed: 0, traveled: 0 });
@@ -477,21 +395,17 @@ function placeBomb(p) {
 function updateBombs(dt) {
   bombs.forEach(b => {
     b.timer -= dt;
-
     if (b.flying) {
       const mv = b.flySpeed * dt;
-      b.fx += DIR_DX[b.flyDir] * mv;
-      b.fy += DIR_DY[b.flyDir] * mv;
+      b.fx += DIR_DX[b.flyDir] * mv; b.fy += DIR_DY[b.flyDir] * mv;
       b.traveled += mv;
       if (b.traveled >= b.flyDist) {
         b.flying = false;
         b.col = Math.floor((b.fx - FIELD_X) / CELL);
         b.row = Math.floor((b.fy - FIELD_Y) / CELL);
-        // Off field?
         if (!cellActive(b.row, b.col)) b.timer = -1;
       }
     }
-
     if (b.timer <= 0) explodeBomb(b);
   });
   bombs = bombs.filter(b => b.timer > -0.5);
@@ -500,40 +414,28 @@ function updateBombs(dt) {
 function explodeBomb(b) {
   if (b.timer <= -0.5) return;
   b.timer = -0.5;
-
   let cx, cy;
-  if (b.flying) {
-    cx = Math.floor((b.fx - FIELD_X) / CELL);
-    cy = Math.floor((b.fy - FIELD_Y) / CELL);
-  } else {
-    cx = b.col; cy = b.row;
-  }
+  if (b.flying) { cx = Math.floor((b.fx - FIELD_X) / CELL); cy = Math.floor((b.fy - FIELD_Y) / CELL); }
+  else { cx = b.col; cy = b.row; }
 
-  // Blast cells
   let blastCells = [{ c: cx, r: cy }];
   for (let d = 0; d < 4; d++) {
     for (let i = 1; i <= BLAST_RANGE; i++) {
-      const nc = cx + DIR_DX[d + 2 < 4 ? d : d] * i; // fix direction mapping
-      let nr, nc2;
-      // Directions: 0=up,1=down,2=left,3=right
-      nc2 = cx + [0, 0, -1, 1][d] * i;
-      nr = cy + [-1, 1, 0, 0][d] * i;
-      if (cellActive(nr, nc2)) blastCells.push({ c: nc2, r: nr });
+      const nc = cx + [0, 0, -1, 1][d] * i;
+      const nr = cy + [-1, 1, 0, 0][d] * i;
+      if (cellActive(nr, nc)) blastCells.push({ c: nc, r: nr });
       else break;
     }
   }
 
-  // Effects
   blastCells.forEach(cell => {
     effects.push({ type: 'explosion', x: FIELD_X + cell.c * CELL + CELL / 2, y: FIELD_Y + cell.r * CELL + CELL / 2, time: 0.4 });
   });
 
-  // Hit players
   players.forEach(p => {
     if (!p.alive) return;
     const pg = playerGridPos(p);
     if (blastCells.some(cell => cell.c === pg.col && cell.r === pg.row)) {
-      // Find direction away from bomb center
       const ddx = p.x - (FIELD_X + cx * CELL + CELL / 2);
       const ddy = p.y - (FIELD_Y + cy * CELL + CELL / 2);
       if (Math.abs(ddx) > Math.abs(ddy)) p.dir = ddx > 0 ? 3 : 2;
@@ -542,15 +444,12 @@ function explodeBomb(b) {
     }
   });
 
-  // Chain explosions
   bombs.forEach(ob => {
     if (ob === b || ob.timer <= -0.5) return;
     let oc, or2;
     if (ob.flying) { oc = Math.floor((ob.fx - FIELD_X) / CELL); or2 = Math.floor((ob.fy - FIELD_Y) / CELL); }
     else { oc = ob.col; or2 = ob.row; }
-    if (blastCells.some(cell => cell.c === oc && cell.r === or2)) {
-      ob.timer = 0.05; // explode soon
-    }
+    if (blastCells.some(cell => cell.c === oc && cell.r === or2)) ob.timer = 0.05;
   });
 }
 
@@ -568,9 +467,7 @@ function updateCPU(p, dt) {
     const g = playerGridPos(p);
     const action = { dx: 0, dy: 0, bomb: false, charge: false };
 
-    // Check if in danger (bomb blast range)
-    let inDanger = false;
-    let dangerDir = -1;
+    let inDanger = false, dangerDir = -1;
     bombs.forEach(b => {
       if (b.flying) return;
       for (let d = 0; d < 4; d++) {
@@ -579,81 +476,49 @@ function updateCPU(p, dt) {
           const br = b.row + [-1, 1, 0, 0][d] * i;
           if (bc === g.col && br === g.row && b.timer < 2.0) {
             inDanger = true;
-            // Move perpendicular
-            if (d <= 1) dangerDir = Math.random() > 0.5 ? 2 : 3;
-            else dangerDir = Math.random() > 0.5 ? 0 : 1;
+            dangerDir = d <= 1 ? (Math.random() > 0.5 ? 2 : 3) : (Math.random() > 0.5 ? 0 : 1);
           }
         }
       }
     });
 
     if (inDanger && dangerDir >= 0) {
-      action.dx = [0, 0, -1, 1][dangerDir];
-      action.dy = [-1, 1, 0, 0][dangerDir];
+      action.dx = [0, 0, -1, 1][dangerDir]; action.dy = [-1, 1, 0, 0][dangerDir];
     } else {
-      // Find nearest alive enemy
       let nearest = null, nearDist = Infinity;
       players.forEach(t => {
         if (t === p || !t.alive) return;
         const d = Math.abs(t.x - p.x) + Math.abs(t.y - p.y);
         if (d < nearDist) { nearDist = d; nearest = t; }
       });
-
       if (nearest) {
-        const dist = nearDist;
-        if (dist < CELL * 2) {
-          // Close: try to bat
+        if (nearDist < CELL * 2) {
           action.charge = true;
-          if (p.chargeTime > MAX_CHARGE * 0.8) action.charge = false; // release
-        } else if (dist < CELL * 4) {
-          // Medium: place bomb and approach
+          if (p.chargeTime > MAX_CHARGE * 0.8) action.charge = false;
+        } else if (nearDist < CELL * 4) {
           if (Math.random() < 0.3) action.bomb = true;
-          const ddx = nearest.x - p.x;
-          const ddy = nearest.y - p.y;
+          const ddx = nearest.x - p.x, ddy = nearest.y - p.y;
           if (Math.abs(ddx) > Math.abs(ddy)) action.dx = ddx > 0 ? 1 : -1;
           else action.dy = ddy > 0 ? 1 : -1;
         } else {
-          // Far: approach
-          const ddx = nearest.x - p.x;
-          const ddy = nearest.y - p.y;
+          const ddx = nearest.x - p.x, ddy = nearest.y - p.y;
           if (Math.abs(ddx) > Math.abs(ddy)) action.dx = ddx > 0 ? 1 : -1;
           else action.dy = ddy > 0 ? 1 : -1;
         }
-      } else {
-        // Random walk
-        const rd = Math.floor(Math.random() * 4);
-        action.dx = [0, 0, -1, 1][rd];
-        action.dy = [-1, 1, 0, 0][rd];
       }
     }
-
-    // Avoid field edges
-    const margin = (shrinkLevel + 1) * CELL + FIELD_X;
-    const marginR = FIELD_X + (13 - shrinkLevel - 1) * CELL;
-    const marginT = (shrinkLevel + 1) * CELL + FIELD_Y;
-    const marginB = FIELD_Y + (13 - shrinkLevel - 1) * CELL;
-    if (p.x < margin + CELL) action.dx = 1;
-    if (p.x > marginR - CELL) action.dx = -1;
-    if (p.y < marginT + CELL) action.dy = 1;
-    if (p.y > marginB - CELL) action.dy = -1;
-
+    const ml = (shrinkLevel + 1) * CELL + FIELD_X, mr = FIELD_X + (12 - shrinkLevel) * CELL;
+    const mt = (shrinkLevel + 1) * CELL + FIELD_Y, mb = FIELD_Y + (12 - shrinkLevel) * CELL;
+    if (p.x < ml + CELL) action.dx = 1; if (p.x > mr - CELL) action.dx = -1;
+    if (p.y < mt + CELL) action.dy = 1; if (p.y > mb - CELL) action.dy = -1;
     p._aiAction = action;
   }
 
   const a = p._aiAction;
-  const inp = {
-    up: a.dy < 0, down: a.dy > 0, left: a.dx < 0, right: a.dx > 0,
-    bomb: a.bomb, charging: a.charge, chargeTime: p.chargeTime, swingRelease: false
-  };
-
-  // Handle charge release for CPU
-  if (!a.charge && p.charging && p.chargeTime > 0) {
-    inp.swingRelease = true;
-    inp.charging = false;
-  }
-
+  const inp = { up: a.dy < 0, down: a.dy > 0, left: a.dx < 0, right: a.dx > 0, bomb: a.bomb, charging: a.charge, chargeTime: p.chargeTime };
+  if (!a.charge && p.charging && p.chargeTime > 0) { inp.charging = false; }
   updatePlayer(p, dt, inp);
-  if (a.bomb) a.bomb = false; // one-shot
+  if (a.bomb) a.bomb = false;
 }
 
 // ============================================
@@ -670,43 +535,28 @@ function updateEffects(dt) {
 function render() {
   ctx.fillStyle = '#111';
   ctx.fillRect(0, 0, 800, 600);
-
-  if (!gameRunning && players.length === 0) return; // Nothing to draw yet
-
-  drawField();
-  drawBombs();
-  drawPlayers();
-  drawEffects();
-  drawHUD();
+  if (!field.length || (!gameRunning && players.length === 0)) return;
+  drawField(); drawBombs(); drawPlayers(); drawEffects(); drawHUD();
 }
 
 function drawField() {
   for (let r = 0; r < ROWS; r++) {
     for (let c = 0; c < COLS; c++) {
-      const x = FIELD_X + c * CELL;
-      const y = FIELD_Y + r * CELL;
+      const x = FIELD_X + c * CELL, y = FIELD_Y + r * CELL;
       if (field[r][c] === 2) {
-        ctx.fillStyle = '#0a0a0a';
-        ctx.fillRect(x, y, CELL, CELL);
+        ctx.fillStyle = '#0a0a0a'; ctx.fillRect(x, y, CELL, CELL);
       } else if (field[r][c] === 1) {
-        // Warning: blink
         const blink = Math.sin(gameTime * 8) > 0;
-        ctx.fillStyle = blink ? '#661a1a' : '#2a3a2a';
-        ctx.fillRect(x, y, CELL, CELL);
-        ctx.strokeStyle = blink ? '#992222' : '#3a4a3a';
-        ctx.strokeRect(x + 0.5, y + 0.5, CELL - 1, CELL - 1);
+        ctx.fillStyle = blink ? '#661a1a' : '#2a3a2a'; ctx.fillRect(x, y, CELL, CELL);
+        ctx.strokeStyle = blink ? '#992222' : '#3a4a3a'; ctx.strokeRect(x + 0.5, y + 0.5, CELL - 1, CELL - 1);
       } else {
-        ctx.fillStyle = (r + c) % 2 === 0 ? '#2a3a2a' : '#253525';
-        ctx.fillRect(x, y, CELL, CELL);
-        ctx.strokeStyle = '#3a4a3a';
-        ctx.strokeRect(x + 0.5, y + 0.5, CELL - 1, CELL - 1);
+        ctx.fillStyle = (r + c) % 2 === 0 ? '#2a3a2a' : '#253525'; ctx.fillRect(x, y, CELL, CELL);
+        ctx.strokeStyle = '#3a4a3a'; ctx.strokeRect(x + 0.5, y + 0.5, CELL - 1, CELL - 1);
       }
     }
   }
-  // Field border
   const bl = shrinkLevel;
-  ctx.strokeStyle = '#f84';
-  ctx.lineWidth = 2;
+  ctx.strokeStyle = '#f84'; ctx.lineWidth = 2;
   ctx.strokeRect(FIELD_X + bl * CELL, FIELD_Y + bl * CELL, (13 - bl * 2) * CELL, (13 - bl * 2) * CELL);
   ctx.lineWidth = 1;
 }
@@ -714,442 +564,258 @@ function drawField() {
 function drawBombs() {
   bombs.forEach(b => {
     let bx, by;
-    if (b.flying) {
-      bx = b.fx; by = b.fy;
-    } else {
-      bx = FIELD_X + b.col * CELL + CELL / 2;
-      by = FIELD_Y + b.row * CELL + CELL / 2;
-    }
+    if (b.flying) { bx = b.fx; by = b.fy; }
+    else { bx = FIELD_X + b.col * CELL + CELL / 2; by = FIELD_Y + b.row * CELL + CELL / 2; }
 
-    // Show blast range warning
     if (!b.flying && b.timer <= BOMB_WARN && b.timer > 0) {
       const blink = Math.sin(gameTime * 12) > 0;
       if (blink) {
         ctx.fillStyle = 'rgba(255,60,30,0.25)';
         for (let d = 0; d < 4; d++) {
           for (let i = 1; i <= BLAST_RANGE; i++) {
-            const nc = b.col + [0, 0, -1, 1][d] * i;
-            const nr = b.row + [-1, 1, 0, 0][d] * i;
-            if (cellActive(nr, nc)) {
-              ctx.fillRect(FIELD_X + nc * CELL, FIELD_Y + nr * CELL, CELL, CELL);
-            }
+            const nc = b.col + [0, 0, -1, 1][d] * i, nr = b.row + [-1, 1, 0, 0][d] * i;
+            if (cellActive(nr, nc)) ctx.fillRect(FIELD_X + nc * CELL, FIELD_Y + nr * CELL, CELL, CELL);
           }
         }
-        // Center cell
         ctx.fillRect(FIELD_X + b.col * CELL, FIELD_Y + b.row * CELL, CELL, CELL);
       }
     }
 
-    // Bomb body
-    const pulse = 1 + Math.sin(gameTime * 6) * 0.1;
-    const sz = 14 * pulse;
+    const pulse = 1 + Math.sin(gameTime * 6) * 0.1, sz = 14 * pulse;
     ctx.fillStyle = b.timer < 1 ? '#ff4422' : '#333';
-    ctx.beginPath();
-    ctx.arc(bx, by, sz, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.strokeStyle = '#666';
-    ctx.lineWidth = 2;
-    ctx.stroke();
+    ctx.beginPath(); ctx.arc(bx, by, sz, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = '#666'; ctx.lineWidth = 2; ctx.stroke(); ctx.lineWidth = 1;
+    ctx.strokeStyle = '#fa0'; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.moveTo(bx, by - sz); ctx.lineTo(bx + 4, by - sz - 8); ctx.stroke();
+    if (b.timer > 0) { ctx.fillStyle = '#ff0'; ctx.beginPath(); ctx.arc(bx + 4, by - sz - 8, 3 + Math.random() * 2, 0, Math.PI * 2); ctx.fill(); }
     ctx.lineWidth = 1;
-
-    // Fuse
-    ctx.strokeStyle = '#fa0';
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    ctx.moveTo(bx, by - sz);
-    ctx.lineTo(bx + 4, by - sz - 8);
-    ctx.stroke();
-    if (b.timer > 0) {
-      ctx.fillStyle = '#ff0';
-      ctx.beginPath();
-      ctx.arc(bx + 4, by - sz - 8, 3 + Math.random() * 2, 0, Math.PI * 2);
-      ctx.fill();
-    }
-    ctx.lineWidth = 1;
-
-    // Owner color indicator
-    ctx.fillStyle = COLORS[b.owner];
-    ctx.fillRect(bx - 3, by - 3, 6, 6);
+    ctx.fillStyle = COLORS[b.owner]; ctx.fillRect(bx - 3, by - 3, 6, 6);
   });
 }
 
 function drawPlayers() {
   players.forEach(p => {
     if (!p.alive && p.eliminateAnim <= 0) return;
+    ctx.globalAlpha = p.alive ? 1 : Math.max(0, p.eliminateAnim);
+    const x = p.x, y = p.y, color = COLORS[p.idx], s = PLAYER_SIZE, hs = s / 2;
 
-    const alpha = p.alive ? 1 : Math.max(0, p.eliminateAnim);
-    ctx.globalAlpha = alpha;
-
-    const x = p.x, y = p.y;
-    const color = COLORS[p.idx];
-
-    // Stun indicator
     if (p.stunTime > 0) {
-      ctx.save();
-      ctx.strokeStyle = '#ff0';
-      ctx.lineWidth = 2;
-      ctx.setLineDash([3, 3]);
-      ctx.beginPath();
-      ctx.arc(x, y, PLAYER_SIZE / 2 + 4, 0, Math.PI * 2);
-      ctx.stroke();
-      ctx.setLineDash([]);
-      ctx.restore();
+      ctx.save(); ctx.strokeStyle = '#ff0'; ctx.lineWidth = 2; ctx.setLineDash([3, 3]);
+      ctx.beginPath(); ctx.arc(x, y, hs + 4, 0, Math.PI * 2); ctx.stroke();
+      ctx.setLineDash([]); ctx.restore();
     }
 
-    // Body (pixel art style: blocky)
-    const s = PLAYER_SIZE;
-    const hs = s / 2;
+    ctx.fillStyle = 'rgba(0,0,0,0.3)'; ctx.fillRect(x - hs + 2, y - hs + 2, s, s);
+    ctx.fillStyle = color; ctx.fillRect(x - hs, y - hs, s, s);
+    ctx.fillStyle = lighten(color, 30); ctx.fillRect(x - hs + 4, y - hs + 4, s - 8, s - 8);
 
-    // Shadow
-    ctx.fillStyle = 'rgba(0,0,0,0.3)';
-    ctx.fillRect(x - hs + 2, y - hs + 2, s, s);
-
-    // Body
-    ctx.fillStyle = color;
-    ctx.fillRect(x - hs, y - hs, s, s);
-
-    // Inner body detail (pixel art feel)
-    ctx.fillStyle = lighten(color, 30);
-    ctx.fillRect(x - hs + 4, y - hs + 4, s - 8, s - 8);
-
-    // Eyes based on direction
     ctx.fillStyle = '#fff';
-    const eyeSize = 4;
+    const ez = 4;
     let ex1, ey1, ex2, ey2;
     switch (p.dir) {
-      case 0: // up
-        ex1 = x - 5; ey1 = y - 6; ex2 = x + 3; ey2 = y - 6; break;
-      case 1: // down
-        ex1 = x - 5; ey1 = y + 2; ex2 = x + 3; ey2 = y + 2; break;
-      case 2: // left
-        ex1 = x - 7; ey1 = y - 5; ex2 = x - 7; ey2 = y + 3; break;
-      case 3: // right
-        ex1 = x + 3; ey1 = y - 5; ex2 = x + 3; ey2 = y + 3; break;
+      case 0: ex1=x-5;ey1=y-6;ex2=x+3;ey2=y-6; break;
+      case 1: ex1=x-5;ey1=y+2;ex2=x+3;ey2=y+2; break;
+      case 2: ex1=x-7;ey1=y-5;ex2=x-7;ey2=y+3; break;
+      case 3: ex1=x+3;ey1=y-5;ex2=x+3;ey2=y+3; break;
     }
-    ctx.fillRect(ex1, ey1, eyeSize, eyeSize);
-    ctx.fillRect(ex2, ey2, eyeSize, eyeSize);
-
-    // Pupils
+    ctx.fillRect(ex1, ey1, ez, ez); ctx.fillRect(ex2, ey2, ez, ez);
     ctx.fillStyle = '#111';
-    ctx.fillRect(ex1 + 1, ey1 + 1, 2, 2);
-    ctx.fillRect(ex2 + 1, ey2 + 1, 2, 2);
+    ctx.fillRect(ex1+1, ey1+1, 2, 2); ctx.fillRect(ex2+1, ey2+1, 2, 2);
 
-    // Direction indicator (small triangle)
     ctx.fillStyle = '#fff';
-    const indDist = hs + 4;
-    const ix = x + DIR_DX[p.dir] * indDist;
-    const iy = y + DIR_DY[p.dir] * indDist;
+    const indD = hs + 4, ix = x + DIR_DX[p.dir] * indD, iy = y + DIR_DY[p.dir] * indD;
     ctx.beginPath();
-    if (p.dir === 0) { ctx.moveTo(ix, iy - 3); ctx.lineTo(ix - 3, iy + 2); ctx.lineTo(ix + 3, iy + 2); }
-    if (p.dir === 1) { ctx.moveTo(ix, iy + 3); ctx.lineTo(ix - 3, iy - 2); ctx.lineTo(ix + 3, iy - 2); }
-    if (p.dir === 2) { ctx.moveTo(ix - 3, iy); ctx.lineTo(ix + 2, iy - 3); ctx.lineTo(ix + 2, iy + 3); }
-    if (p.dir === 3) { ctx.moveTo(ix + 3, iy); ctx.lineTo(ix - 2, iy - 3); ctx.lineTo(ix - 2, iy + 3); }
+    if (p.dir===0){ctx.moveTo(ix,iy-3);ctx.lineTo(ix-3,iy+2);ctx.lineTo(ix+3,iy+2);}
+    if (p.dir===1){ctx.moveTo(ix,iy+3);ctx.lineTo(ix-3,iy-2);ctx.lineTo(ix+3,iy-2);}
+    if (p.dir===2){ctx.moveTo(ix-3,iy);ctx.lineTo(ix+2,iy-3);ctx.lineTo(ix+2,iy+3);}
+    if (p.dir===3){ctx.moveTo(ix+3,iy);ctx.lineTo(ix-2,iy-3);ctx.lineTo(ix-2,iy+3);}
     ctx.fill();
 
-    // Charge bar
     if (p.charging && p.chargeTime > 0) {
-      const barW = 30;
-      const ratio = p.chargeTime / MAX_CHARGE;
-      ctx.fillStyle = '#333';
-      ctx.fillRect(x - barW / 2, y - hs - 12, barW, 6);
+      const barW = 30, ratio = p.chargeTime / MAX_CHARGE;
+      ctx.fillStyle = '#333'; ctx.fillRect(x - barW/2, y - hs - 12, barW, 6);
       ctx.fillStyle = ratio >= 0.95 ? '#f0f' : ratio > 0.5 ? '#fa0' : '#0f0';
-      ctx.fillRect(x - barW / 2, y - hs - 12, barW * ratio, 6);
-      ctx.strokeStyle = '#fff';
-      ctx.strokeRect(x - barW / 2, y - hs - 12, barW, 6);
+      ctx.fillRect(x - barW/2, y - hs - 12, barW * ratio, 6);
+      ctx.strokeStyle = '#fff'; ctx.strokeRect(x - barW/2, y - hs - 12, barW, 6);
       if (ratio >= 0.95) {
-        ctx.fillStyle = '#f0f';
-        ctx.font = '10px monospace';
-        ctx.textAlign = 'center';
-        ctx.fillText('MAX!', x, y - hs - 16);
-        ctx.textAlign = 'left';
+        ctx.fillStyle = '#f0f'; ctx.font = '10px monospace'; ctx.textAlign = 'center';
+        ctx.fillText('MAX!', x, y - hs - 16); ctx.textAlign = 'left';
       }
     }
 
-    // Player label
-    ctx.fillStyle = '#fff';
-    ctx.font = 'bold 10px monospace';
-    ctx.textAlign = 'center';
-    const label = p.isCpu ? 'CPU' : 'P' + (p.idx + 1);
-    ctx.fillText(label, x, y + hs + 14);
+    ctx.fillStyle = '#fff'; ctx.font = 'bold 10px monospace'; ctx.textAlign = 'center';
+    ctx.fillText(p.isCpu ? 'CPU' : 'P' + (p.idx + 1), x, y + hs + 14);
     ctx.textAlign = 'left';
-
     ctx.globalAlpha = 1;
   });
 }
 
 function drawEffects() {
   effects.forEach(e => {
-    const alpha = Math.max(0, e.time / 0.5);
-    ctx.globalAlpha = alpha;
-
+    ctx.globalAlpha = Math.max(0, e.time / 0.5);
     if (e.type === 'explosion') {
-      const sz = CELL * (1 - e.time);
-      ctx.fillStyle = '#ff8800';
-      ctx.fillRect(e.x - CELL / 2, e.y - CELL / 2, CELL, CELL);
-      ctx.fillStyle = '#ffcc00';
-      ctx.fillRect(e.x - CELL / 4, e.y - CELL / 4, CELL / 2, CELL / 2);
+      ctx.fillStyle = '#ff8800'; ctx.fillRect(e.x - CELL/2, e.y - CELL/2, CELL, CELL);
+      ctx.fillStyle = '#ffcc00'; ctx.fillRect(e.x - CELL/4, e.y - CELL/4, CELL/2, CELL/2);
     }
-
     if (e.type === 'swing') {
-      ctx.strokeStyle = e.charge >= 0.95 ? '#ff00ff' : '#ffffff';
-      ctx.lineWidth = 3;
-      const len = BAT_RANGE * CELL;
+      ctx.strokeStyle = e.charge >= 0.95 ? '#ff00ff' : '#ffffff'; ctx.lineWidth = 3;
       ctx.beginPath();
-      if (e.dir === 0) { ctx.arc(e.x, e.y, len, -Math.PI * 0.8, -Math.PI * 0.2); }
-      if (e.dir === 1) { ctx.arc(e.x, e.y, len, Math.PI * 0.2, Math.PI * 0.8); }
-      if (e.dir === 2) { ctx.arc(e.x, e.y, len, Math.PI * 0.7, Math.PI * 1.3); }
-      if (e.dir === 3) { ctx.arc(e.x, e.y, len, -Math.PI * 0.3, Math.PI * 0.3); }
-      ctx.stroke();
-      ctx.lineWidth = 1;
+      if (e.dir===0) ctx.arc(e.x,e.y,BAT_RANGE*CELL,-Math.PI*0.8,-Math.PI*0.2);
+      if (e.dir===1) ctx.arc(e.x,e.y,BAT_RANGE*CELL,Math.PI*0.2,Math.PI*0.8);
+      if (e.dir===2) ctx.arc(e.x,e.y,BAT_RANGE*CELL,Math.PI*0.7,Math.PI*1.3);
+      if (e.dir===3) ctx.arc(e.x,e.y,BAT_RANGE*CELL,-Math.PI*0.3,Math.PI*0.3);
+      ctx.stroke(); ctx.lineWidth = 1;
     }
-
     if (e.type === 'hit') {
-      ctx.fillStyle = '#fff';
-      ctx.font = 'bold 18px monospace';
-      ctx.textAlign = 'center';
-      ctx.fillText('HIT!', e.x, e.y - 20);
-      ctx.textAlign = 'left';
+      ctx.fillStyle='#fff';ctx.font='bold 18px monospace';ctx.textAlign='center';
+      ctx.fillText('HIT!',e.x,e.y-20);ctx.textAlign='left';
     }
-
     if (e.type === 'elim') {
-      ctx.fillStyle = '#f44';
-      ctx.font = 'bold 16px monospace';
-      ctx.textAlign = 'center';
-      ctx.fillText('OUT!', e.x, e.y - 30);
-      ctx.textAlign = 'left';
+      ctx.fillStyle='#f44';ctx.font='bold 16px monospace';ctx.textAlign='center';
+      ctx.fillText('OUT!',e.x,e.y-30);ctx.textAlign='left';
     }
-
     ctx.globalAlpha = 1;
   });
 }
 
 function drawHUD() {
-  // Timer
-  ctx.fillStyle = '#fff';
-  ctx.font = '14px monospace';
+  ctx.fillStyle = '#fff'; ctx.font = '14px monospace';
   ctx.fillText('TIME: ' + Math.floor(gameTime) + 's', 10, 20);
   ctx.fillText('SHRINK: ' + Math.max(0, Math.floor(SHRINK_INTERVAL - shrinkTimer)) + 's', 10, 38);
-
-  // Player status
   players.forEach((p, i) => {
     const sx = 300 + i * 100;
-    ctx.fillStyle = p.alive ? COLORS[i] : '#555';
-    ctx.fillRect(sx, 4, 12, 12);
-    ctx.fillStyle = '#fff';
-    ctx.font = '12px monospace';
-    const label = p.isCpu ? 'CPU' : 'P' + (i + 1);
-    ctx.fillText(label + (p.alive ? '' : ' OUT'), sx + 16, 14);
+    ctx.fillStyle = p.alive ? COLORS[i] : '#555'; ctx.fillRect(sx, 4, 12, 12);
+    ctx.fillStyle = '#fff'; ctx.font = '12px monospace';
+    ctx.fillText((p.isCpu ? 'CPU' : 'P' + (i+1)) + (p.alive ? '' : ' OUT'), sx + 16, 14);
   });
 }
 
 function lighten(hex, amt) {
-  let r = parseInt(hex.slice(1, 3), 16);
-  let g = parseInt(hex.slice(3, 5), 16);
-  let b = parseInt(hex.slice(5, 7), 16);
-  r = Math.min(255, r + amt); g = Math.min(255, g + amt); b = Math.min(255, b + amt);
-  return '#' + [r, g, b].map(v => v.toString(16).padStart(2, '0')).join('');
+  let r=parseInt(hex.slice(1,3),16),g=parseInt(hex.slice(3,5),16),b=parseInt(hex.slice(5,7),16);
+  return '#'+[Math.min(255,r+amt),Math.min(255,g+amt),Math.min(255,b+amt)].map(v=>v.toString(16).padStart(2,'0')).join('');
 }
 
 // ============================================
-// NETWORK (WebRTC)
+// NETWORK (PeerJS)
 // ============================================
-const ICE_CONFIG = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] };
-
-async function createPeerConnection(onMessage) {
-  const pc = new RTCPeerConnection(ICE_CONFIG);
-  const info = { pc, dc: null, ready: false };
-
-  pc.oniceconnectionstatechange = () => {
-    if (pc.iceConnectionState === 'disconnected' || pc.iceConnectionState === 'failed') {
-      info.ready = false;
-    }
-  };
-
-  return info;
+function generateRoomCode() {
+  return String(Math.floor(1000 + Math.random() * 9000));
 }
 
-async function waitICE(pc) {
-  if (pc.iceGatheringState === 'complete') return;
-  await new Promise(r => {
-    pc.addEventListener('icegatheringstatechange', () => {
-      if (pc.iceGatheringState === 'complete') r();
+function netHost() {
+  const code = generateRoomCode();
+  document.getElementById('lobbyChoice').style.display = 'none';
+  document.getElementById('lobbyHostView').style.display = 'block';
+  document.getElementById('roomCodeDisplay').textContent = code;
+  document.getElementById('hostStatus').textContent = '接続待ち...';
+  document.getElementById('hostStatus').className = 'status wait';
+
+  netRole = 'host';
+  netConns = [];
+  remoteInputs = {};
+  const needed = onlinePlayers - 1;
+
+  peer = new Peer('batbattle-' + code);
+  peer.on('error', (err) => {
+    document.getElementById('hostStatus').textContent = 'エラー: ' + err.type;
+    document.getElementById('hostStatus').className = 'status err';
+  });
+  peer.on('open', () => {
+    document.getElementById('hostStatus').textContent = '部屋作成完了！ 接続待ち... (0/' + needed + ')';
+  });
+  peer.on('connection', (conn) => {
+    const guestIdx = netConns.length + 1;
+    const info = { conn, guestIdx, ready: false };
+    netConns.push(info);
+
+    conn.on('open', () => {
+      info.ready = true;
+      const count = netConns.filter(c => c.ready).length;
+      document.getElementById('hostStatus').textContent = '接続済み: ' + count + '/' + needed;
+      document.getElementById('hostStatus').className = count >= needed ? 'status ok' : 'status wait';
+      if (count >= needed) document.getElementById('btnStart').style.display = 'block';
     });
-    setTimeout(r, 5000); // timeout
+    conn.on('data', (data) => {
+      if (data.type === 'input') remoteInputs[guestIdx] = data.input;
+      if (data.type === 'rematch') {
+        rematchVotes.add(guestIdx);
+        checkRematchAll();
+      }
+    });
+    conn.on('close', () => { info.ready = false; });
   });
 }
 
-function encodeDesc(desc) {
-  // Extract only essential SDP fields for shorter codes
-  const sdp = desc.sdp;
-  const compact = {
-    t: desc.type === 'offer' ? 'o' : 'a',
-    u: sdp.match(/a=ice-ufrag:(.+)/)[1].trim(),
-    p: sdp.match(/a=ice-pwd:(.+)/)[1].trim(),
-    f: sdp.match(/a=fingerprint:sha-256 (.+)/)[1].trim(),
-    s: sdp.match(/a=setup:(.+)/)[1].trim(),
-    c: [...sdp.matchAll(/a=candidate:(.+)/g)].map(m => m[1].trim())
-  };
-  return btoa(JSON.stringify(compact)).replace(/=+$/, '');
-}
-
-function decodeDesc(str) {
-  // Pad base64 if needed
-  while (str.length % 4 !== 0) str += '=';
-  const compact = JSON.parse(atob(str));
-  const type = compact.t === 'o' ? 'offer' : 'answer';
-  const setup = compact.s;
-  let sdp = [
-    'v=0', 'o=- ' + Date.now() + ' 2 IN IP4 127.0.0.1', 's=-', 't=0 0',
-    'a=group:BUNDLE 0', 'a=extmap-allow-mixed', 'a=msid-semantic: WMS',
-    'm=application 9 UDP/DTLS/SCTP webrtc-datachannel', 'c=IN IP4 0.0.0.0',
-    'a=ice-ufrag:' + compact.u, 'a=ice-pwd:' + compact.p, 'a=ice-options:trickle',
-    'a=fingerprint:sha-256 ' + compact.f, 'a=setup:' + setup,
-    'a=mid:0', 'a=sctp-port:5000', 'a=max-message-size:262144'
-  ].join('\r\n') + '\r\n';
-  compact.c.forEach(c => { sdp += 'a=candidate:' + c + '\r\n'; });
-  return { type, sdp };
-}
-
-async function netHost() {
-  netRole = 'host';
-  document.getElementById('lobbyHost').style.display = 'block';
-  document.getElementById('lobbyJoin').style.display = 'none';
-  document.getElementById('btnHost').style.display = 'none';
-  document.getElementById('btnJoin').style.display = 'none';
-
-  if (onlinePlayers === 3) document.getElementById('host2ndSlot').style.display = 'block';
-
-  netConnections = [];
-  const guestCount = onlinePlayers - 1;
-
-  for (let i = 0; i < guestCount; i++) {
-    const pc = new RTCPeerConnection(ICE_CONFIG);
-    const dc = pc.createDataChannel('game');
-    const info = { pc, dc, ready: false, guestIdx: i + 1 };
-
-    dc.onopen = () => {
-      info.ready = true;
-      updateHostStatus();
-    };
-    dc.onmessage = (ev) => {
-      try {
-        const data = JSON.parse(ev.data);
-        if (data.type === 'input') remoteInputs[info.guestIdx] = data.input;
-      } catch (e) {}
-    };
-
-    const offer = await pc.createOffer();
-    await pc.setLocalDescription(offer);
-    await waitICE(pc);
-
-    document.getElementById('offer' + (i + 1)).value = encodeDesc(pc.localDescription);
-    netConnections.push(info);
-  }
-
-  guestAnswerQueue = [];
-}
-
-function updateHostStatus() {
-  const allReady = netConnections.every(c => c.ready);
-  const count = netConnections.filter(c => c.ready).length;
-  const el = document.getElementById('hostStatus');
-  el.textContent = `接続済み: ${count}/${netConnections.length}`;
-  el.className = allReady ? 'status ok' : 'status wait';
-  document.getElementById('btnStart').style.display = allReady ? 'block' : 'none';
-}
-
-async function hostApplyAnswer() {
-  const ansStr = document.getElementById('answerInput').value.trim();
-  if (!ansStr) return;
-
-  // Find next unconnected peer
-  const info = netConnections.find(c => !c.ready);
-  if (!info) return;
-
-  try {
-    const desc = decodeDesc(ansStr);
-    await info.pc.setRemoteDescription(desc);
-    document.getElementById('answerInput').value = '';
-    document.getElementById('hostStatus').textContent = '接続処理中...';
-  } catch (e) {
-    document.getElementById('hostStatus').textContent = 'エラー: 無効なコード';
-  }
-}
-
-async function netJoin() {
+function netJoinUI() {
+  document.getElementById('lobbyChoice').style.display = 'none';
+  document.getElementById('lobbyJoinView').style.display = 'block';
+  document.getElementById('joinStatus').textContent = '';
   netRole = 'guest';
-  document.getElementById('lobbyHost').style.display = 'none';
-  document.getElementById('lobbyJoin').style.display = 'block';
-  document.getElementById('btnHost').style.display = 'none';
-  document.getElementById('btnJoin').style.display = 'none';
 }
 
-async function joinApplyOffer() {
-  const offerStr = document.getElementById('offerInput').value.trim();
-  if (!offerStr) return;
-
-  try {
-    const pc = new RTCPeerConnection(ICE_CONFIG);
-    const info = { pc, dc: null, ready: false };
-
-    pc.ondatachannel = (ev) => {
-      info.dc = ev.channel;
-      info.dc.onopen = () => {
-        info.ready = true;
-        document.getElementById('joinStatus').textContent = '接続完了！ホストがゲームを開始するのを待っています...';
-        document.getElementById('joinStatus').className = 'status ok';
-      };
-      info.dc.onmessage = (ev2) => {
-        try {
-          const data = JSON.parse(ev2.data);
-          if (data.type === 'state') applyRemoteState(data);
-          if (data.type === 'start') startOnlineGame(data);
-        } catch (e) {}
-      };
-    };
-
-    const desc = decodeDesc(offerStr);
-    await pc.setRemoteDescription(desc);
-    const answer = await pc.createAnswer();
-    await pc.setLocalDescription(answer);
-    await waitICE(pc);
-
-    document.getElementById('answerOutput').value = encodeDesc(pc.localDescription);
-    document.getElementById('joinStatus').textContent = 'アンサーコードをホストに送ってください';
-    document.getElementById('joinStatus').className = 'status wait';
-
-    netConnections = [info];
-  } catch (e) {
-    document.getElementById('joinStatus').textContent = 'エラー: 無効なコード';
+function netJoinRoom() {
+  const code = document.getElementById('roomCodeInput').value.trim();
+  if (code.length !== 4) {
+    document.getElementById('joinStatus').textContent = '4桁のコードを入力してください';
+    document.getElementById('joinStatus').className = 'status err';
+    return;
   }
+
+  document.getElementById('joinStatus').textContent = '接続中...';
+  document.getElementById('joinStatus').className = 'status wait';
+
+  peer = new Peer();
+  peer.on('open', () => {
+    const conn = peer.connect('batbattle-' + code);
+    netConns = [{ conn, ready: false }];
+
+    conn.on('open', () => {
+      netConns[0].ready = true;
+      document.getElementById('joinStatus').textContent = '接続完了！ホストがゲームを開始するのを待っています...';
+      document.getElementById('joinStatus').className = 'status ok';
+    });
+    conn.on('data', (data) => {
+      if (data.type === 'start') {
+        gameMode = 'online-guest';
+        localPlayerIdx = data.yourIdx;
+        playerCount = data.playerCount;
+        hideAllScreens();
+        gameRunning = true;
+      }
+      if (data.type === 'state') applyRemoteState(data);
+      if (data.type === 'gameover') showResult(data.winnerLabel, data.winnerColor);
+      if (data.type === 'rematch') {
+        hideAllScreens();
+        gameRunning = true;
+      }
+    });
+    conn.on('close', () => {
+      document.getElementById('joinStatus').textContent = 'ホストとの接続が切れました';
+      document.getElementById('joinStatus').className = 'status err';
+    });
+    conn.on('error', () => {
+      document.getElementById('joinStatus').textContent = '接続エラー';
+      document.getElementById('joinStatus').className = 'status err';
+    });
+  });
+  peer.on('error', (err) => {
+    if (err.type === 'peer-unavailable') {
+      document.getElementById('joinStatus').textContent = '部屋が見つかりません。コードを確認してください。';
+    } else {
+      document.getElementById('joinStatus').textContent = 'エラー: ' + err.type;
+    }
+    document.getElementById('joinStatus').className = 'status err';
+  });
 }
 
 function netStartGame() {
-  // Send start signal
-  const startData = { type: 'start', playerCount: onlinePlayers };
-  netConnections.forEach((c, i) => {
-    c.dc.send(JSON.stringify({ ...startData, yourIdx: i + 1 }));
-  });
   gameMode = 'online-host';
   localPlayerIdx = 0;
   initGame(onlinePlayers, false);
   hideAllScreens();
-}
-
-function startOnlineGame(data) {
-  gameMode = 'online-guest';
-  localPlayerIdx = data.yourIdx;
-  playerCount = data.playerCount;
-  hideAllScreens();
-  // Guest just renders, host sends state
-}
-
-function sendInputToHost() {
-  if (netRole !== 'guest' || !netConnections[0] || !netConnections[0].ready) return;
-  const inp = getLocalInput(0); // local input
-  try {
-    netConnections[0].dc.send(JSON.stringify({ type: 'input', input: inp }));
-  } catch (e) {}
+  netConns.forEach((c, i) => {
+    if (c.ready) c.conn.send({ type: 'start', yourIdx: i + 1, playerCount: onlinePlayers });
+  });
 }
 
 function broadcastState() {
@@ -1157,82 +823,57 @@ function broadcastState() {
   const state = {
     type: 'state',
     players: players.map(p => ({
-      x: p.x, y: p.y, dir: p.dir, alive: p.alive, charging: p.charging,
-      chargeTime: p.chargeTime, stunTime: p.stunTime, knockback: p.knockback,
-      kbVx: p.kbVx, kbVy: p.kbVy, kbTime: p.kbTime, eliminateAnim: p.eliminateAnim,
-      isCpu: p.isCpu, idx: p.idx, bombCount: p.bombCount
+      x:p.x,y:p.y,dir:p.dir,alive:p.alive,charging:p.charging,
+      chargeTime:p.chargeTime,stunTime:p.stunTime,knockback:p.knockback,
+      kbVx:p.kbVx,kbVy:p.kbVy,kbTime:p.kbTime,eliminateAnim:p.eliminateAnim,
+      isCpu:p.isCpu,idx:p.idx
     })),
-    bombs: bombs.map(b => ({
-      owner: b.owner, col: b.col, row: b.row, timer: b.timer, flying: b.flying,
-      fx: b.fx, fy: b.fy, flyDir: b.flyDir
-    })),
-    field: field,
-    shrinkLevel, shrinkTimer, gameTime,
-    effects: effects.slice(-10).map(e => ({ type: e.type, x: e.x, y: e.y, time: e.time }))
+    bombs: bombs.map(b => ({ owner:b.owner,col:b.col,row:b.row,timer:b.timer,flying:b.flying,fx:b.fx,fy:b.fy,flyDir:b.flyDir })),
+    field, shrinkLevel, shrinkTimer, gameTime,
+    effects: effects.slice(-10).map(e => ({ type:e.type,x:e.x,y:e.y,time:e.time,charge:e.charge,dir:e.dir }))
   };
-  netConnections.forEach(c => {
-    if (c.ready) {
-      try { c.dc.send(JSON.stringify(state)); } catch (e) {}
-    }
-  });
+  netConns.forEach(c => { if (c.ready) try { c.conn.send(state); } catch(e){} });
+}
+
+function sendInputToHost() {
+  if (netRole !== 'guest' || !netConns[0] || !netConns[0].ready) return;
+  const inp = getLocalInput(0);
+  try { netConns[0].conn.send({ type: 'input', input: inp }); } catch(e) {}
 }
 
 function applyRemoteState(data) {
   if (data.players) {
-    data.players.forEach((rp, i) => {
-      if (!players[i]) players[i] = createPlayer(i, 0, 0, false);
-      Object.assign(players[i], rp);
-    });
-    // Trim extra players
+    while (players.length < data.players.length) players.push(createPlayer(players.length, 0, 0, false));
     players.length = data.players.length;
+    data.players.forEach((rp, i) => Object.assign(players[i], rp));
   }
-  if (data.bombs) {
-    bombs = data.bombs;
-  }
+  if (data.bombs) bombs = data.bombs;
   if (data.field) field = data.field;
   if (data.shrinkLevel !== undefined) shrinkLevel = data.shrinkLevel;
   if (data.shrinkTimer !== undefined) shrinkTimer = data.shrinkTimer;
   if (data.gameTime !== undefined) gameTime = data.gameTime;
   if (data.effects) effects = data.effects;
-  gameRunning = true;
 }
 
-function copyText(id) {
-  const el = document.getElementById(id);
-  el.select();
-  navigator.clipboard.writeText(el.value).then(() => {
-    const btn = el.nextElementSibling;
-    if (btn) { const orig = btn.textContent; btn.textContent = 'Copied!'; setTimeout(() => btn.textContent = orig, 1500); }
-  }).catch(() => document.execCommand('copy'));
+function broadcastGameover(winnerLabel, winnerColor) {
+  netConns.forEach(c => {
+    if (c.ready) try { c.conn.send({ type: 'gameover', winnerLabel, winnerColor }); } catch(e){}
+  });
 }
 
 // ============================================
 // GAME MANAGER
 // ============================================
 function initGame(numPlayers, withCPU) {
-  players = [];
-  bombs = [];
-  effects = [];
-  gameTime = 0;
-  initField();
-
-  // Spawn positions
-  const spawns = [
-    { col: 2, row: 2 },
-    { col: 10, row: 10 },
-    { col: 10, row: 2 },
-    { col: 2, row: 10 }
-  ];
-
+  players = []; bombs = []; effects = [];
+  gameTime = 0; initField();
+  const spawns = [{ col:2,row:2 },{ col:10,row:10 },{ col:10,row:2 },{ col:2,row:10 }];
   for (let i = 0; i < numPlayers; i++) {
-    const isCpu = withCPU && i >= 1;
-    players.push(createPlayer(i, spawns[i].col, spawns[i].row, isCpu));
+    players.push(createPlayer(i, spawns[i].col, spawns[i].row, withCPU && i >= 1));
   }
-
   gameRunning = true;
-  mouseDown = false;
-  mouseDownTime = 0;
-  rightClicked = false;
+  mouseDown = false; mouseDownTime = 0; rightClicked = false;
+  rematchVotes = new Set();
 }
 
 function checkWin() {
@@ -1240,41 +881,70 @@ function checkWin() {
   if (alive.length <= 1) {
     gameRunning = false;
     const winner = alive[0];
-    const resultText = document.getElementById('resultText');
-    if (winner) {
-      const label = winner.isCpu ? 'CPU' : 'P' + (winner.idx + 1);
-      resultText.textContent = label + ' WIN!';
-      resultText.style.color = COLORS[winner.idx];
-    } else {
-      resultText.textContent = 'DRAW!';
-      resultText.style.color = '#fff';
-    }
-    setTimeout(() => {
-      document.getElementById('resultScreen').classList.add('active');
-    }, 1000);
+    const label = winner ? (winner.isCpu ? 'CPU' : 'P' + (winner.idx + 1)) : null;
+    const color = winner ? COLORS[winner.idx] : '#fff';
+    const winLabel = label ? label + ' WIN!' : 'DRAW!';
+
+    if (gameMode === 'online-host') broadcastGameover(winLabel, color);
+    setTimeout(() => showResult(winLabel, color), 800);
   }
+}
+
+function showResult(text, color) {
+  gameRunning = false;
+  const el = document.getElementById('resultText');
+  el.textContent = text;
+  el.style.color = color;
+  document.getElementById('btnRematch').style.display = 'inline-block';
+  document.getElementById('rematchStatus').style.display = 'none';
+  document.getElementById('resultScreen').classList.add('active');
+}
+
+function requestRematch() {
+  if (gameMode === 'local') {
+    // Local: just restart
+    hideAllScreens();
+    const withCPU = players.some(p => p.isCpu);
+    initGame(players.length, withCPU);
+  } else if (gameMode === 'online-host') {
+    // Host: restart and notify guests
+    hideAllScreens();
+    initGame(onlinePlayers, false);
+    netConns.forEach(c => { if (c.ready) try { c.conn.send({ type: 'rematch' }); } catch(e){} });
+  } else if (gameMode === 'online-guest') {
+    // Guest: request rematch from host
+    document.getElementById('btnRematch').style.display = 'none';
+    document.getElementById('rematchStatus').style.display = 'block';
+    document.getElementById('rematchStatus').textContent = 'ホストの再戦を待っています...';
+    document.getElementById('rematchStatus').className = 'status wait';
+    try { netConns[0].conn.send({ type: 'rematch' }); } catch(e){}
+  }
+}
+
+function checkRematchAll() {
+  // Host checks if all guests want rematch (optional: auto-rematch)
+}
+
+function quitToTitle() {
+  showTitle();
 }
 
 // ============================================
 // GAME LOOP
 // ============================================
-let prevMouseDown = false;
-let netSyncTimer = 0;
-
 function gameLoop(ts) {
   const dt = Math.min((ts - lastTs) / 1000, 0.05);
   lastTs = ts;
 
   if (gameRunning) {
     if (gameMode === 'online-guest') {
-      // Guest: send input, render remote state
       sendInputToHost();
+      // Reset one-shot inputs for guest too
+      rightClicked = false;
+      if (!mouseDown && mouseDownTime > 0) mouseDownTime = 0;
       render();
     } else {
-      // Host or local: full simulation
       gameTime += dt;
-
-      // Handle mouse charge timing
       if (mouseDown) mouseDownTime += dt;
 
       updateField(dt);
@@ -1283,35 +953,30 @@ function gameLoop(ts) {
         if (p.isCpu) {
           updateCPU(p, dt);
         } else if (gameMode === 'local') {
-          const inp = getLocalInput(i);
-          updatePlayer(p, dt, inp);
+          updatePlayer(p, dt, getLocalInput(i));
         } else if (gameMode === 'online-host') {
           if (i === 0) {
-            const inp = getLocalInput(0);
-            updatePlayer(p, dt, inp);
+            updatePlayer(p, dt, getLocalInput(0));
           } else {
             const ri = remoteInputs[i] || {};
             updatePlayer(p, dt, ri);
+            // Reset one-shot bomb input after processing
+            if (ri.bomb) ri.bomb = false;
           }
         }
       });
 
-      // Reset one-shot inputs
       rightClicked = false;
       if (!mouseDown && mouseDownTime > 0) mouseDownTime = 0;
 
-      // For local P2/P3 keyboard charge tracking
+      // Local P2/P3 keyboard charge tracking
       if (gameMode === 'local') {
         for (let i = 1; i < players.length; i++) {
           if (players[i].isCpu) continue;
           const inp = getLocalInput(i);
-          if (inp.charging && !players[i].charging) {
-            players[i].charging = true;
-          }
           if (!inp.charging && players[i].charging && players[i].chargeTime > 0) {
             performSwing(players[i]);
-            players[i].charging = false;
-            players[i].chargeTime = 0;
+            players[i].charging = false; players[i].chargeTime = 0;
           }
         }
       }
@@ -1320,21 +985,15 @@ function gameLoop(ts) {
       updateEffects(dt);
       checkWin();
 
-      // Network sync
       if (gameMode === 'online-host') {
         netSyncTimer += dt;
-        if (netSyncTimer >= 1 / 30) {
-          broadcastState();
-          netSyncTimer = 0;
-        }
+        if (netSyncTimer >= 1/30) { broadcastState(); netSyncTimer = 0; }
       }
-
       render();
     }
   } else {
     render();
   }
-
   requestAnimationFrame(gameLoop);
 }
 
@@ -1349,39 +1008,36 @@ function showTitle() {
   hideAllScreens();
   document.getElementById('titleScreen').classList.add('active');
   gameRunning = false;
-  // Reset lobby UI
-  document.getElementById('lobbyHost').style.display = 'none';
-  document.getElementById('lobbyJoin').style.display = 'none';
-  document.getElementById('btnHost').style.display = '';
-  document.getElementById('btnJoin').style.display = '';
-  document.getElementById('host2ndSlot').style.display = 'none';
+  // Reset lobby
+  document.getElementById('lobbyChoice').style.display = 'block';
+  document.getElementById('lobbyHostView').style.display = 'none';
+  document.getElementById('lobbyJoinView').style.display = 'none';
   document.getElementById('btnStart').style.display = 'none';
-  // Close connections
-  netConnections.forEach(c => { try { c.pc.close(); } catch(e){} });
-  netConnections = [];
-  netRole = null;
-  remoteInputs = {};
+  // Cleanup peer
+  if (peer) { try { peer.destroy(); } catch(e){} peer = null; }
+  netConns = []; netRole = null; remoteInputs = {};
 }
 
 function startLocal(num) {
   hideAllScreens();
   gameMode = 'local';
   playerCount = num;
-  const withCPU = num === 1;
-  const actualPlayers = num === 1 ? 2 : num;
-  initGame(actualPlayers, withCPU);
+  initGame(num === 1 ? 2 : num, num === 1);
 }
 
 function showLobby(num) {
   hideAllScreens();
   onlinePlayers = num;
   document.getElementById('lobbyScreen').classList.add('active');
+  document.getElementById('lobbyChoice').style.display = 'block';
+  document.getElementById('lobbyHostView').style.display = 'none';
+  document.getElementById('lobbyJoinView').style.display = 'none';
 }
 
 // ============================================
 // START
 // ============================================
-initField(); // Prevent crash when render runs before game starts
+initField();
 lastTs = performance.now();
 requestAnimationFrame(gameLoop);
 </script>
